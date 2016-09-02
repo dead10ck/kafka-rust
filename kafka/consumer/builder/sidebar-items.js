@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["Builder","A Kafka Consumer builder easing the process of setting up various configuration settings."]]});

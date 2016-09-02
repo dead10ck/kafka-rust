@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["SecurityConfig","Security relevant configuration options for `KafkaClient`."]]});
