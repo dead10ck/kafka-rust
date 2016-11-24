@@ -25,10 +25,23 @@ stop_docker() {
 start_docker() {
   # pull all images before starting anything
   docker-compose pull
-  docker-compose up -d
 
-  # wait for Kafka to be ready and the test topic to be created
-  ./do_until_success "docker-compose logs kafka | grep 'Created topic \"kafka-rust-test\"'"
+  # The third broker creates the topic, but we need to make sure the other two
+  # are up and running before the topic gets created, so bring them up first and
+  # wait for them to be ready
+  docker-compose up -d zookeeper kafka1 kafka2
+
+  # use the ZooKeeper TCP 'dump' command to list all ephemeral nodes. If the
+  # '/brokers/ids/<ID>' ephemeral node exists, then the broker is up and healthy.
+  ./do_until_success "echo dump | nc -w 1 localhost 2181 | grep -F /brokers/ids/1"
+  ./do_until_success "echo dump | nc -w 1 localhost 2181 | grep -F /brokers/ids/2"
+
+  # wait for the third broker to come up, and for the test topic to be created
+  docker-compose up -d kafka3
+  ./do_until_success "echo dump | nc -w 1 localhost 2181 | grep -F /brokers/ids/3"
+  ./do_until_success "docker-compose exec kafka3 " \
+      "/bin/bash -c 'test ! -z \"\$(\$KAFKA_HOME/bin/kafka-topics.sh " \
+      "--zookeeper localhost:2181 --describe --topic kafka-rust-test)\"'"
 }
 
 setup() {
