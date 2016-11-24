@@ -60,8 +60,9 @@
 // XXX 2) Handle recoverable errors behind the scenes through retry attempts
 
 use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
 use std::fmt;
-use std::hash::{Hasher, SipHasher, BuildHasher, BuildHasherDefault};
+use std::hash::{Hasher, BuildHasher, BuildHasherDefault};
 use std::time::Duration;
 use client::{self, KafkaClient};
 use error::{Error, Result};
@@ -564,7 +565,7 @@ pub trait Partitioner {
 ///
 /// See `Builder::with_partitioner`.
 #[derive(Default)]
-pub struct DefaultPartitioner<H = BuildHasherDefault<SipHasher>> {
+pub struct DefaultPartitioner<H = BuildHasherDefault<DefaultHasher>> {
     // ~ a hasher builder; used to consistently hash keys
     hash_builder: H,
     // ~ a counter incremented with each partitioned message to
@@ -645,8 +646,9 @@ impl<H: BuildHasher> Partitioner for DefaultPartitioner<H> {
 
 #[cfg(test)]
 mod default_partitioner_tests {
-    use std::hash::{Hasher, SipHasher, BuildHasherDefault};
+    use std::hash::{Hasher, BuildHasherDefault};
     use std::collections::HashMap;
+    use std::collections::hash_map::DefaultHasher;
 
     use client;
     use super::{DefaultPartitioner, Partitioner, Partitions, Topics};
@@ -690,7 +692,7 @@ mod default_partitioner_tests {
                                      num_all_partitions: 2,
                                  })]);
 
-        let mut p: DefaultPartitioner<BuildHasherDefault<SipHasher>> = Default::default();
+        let mut p: DefaultPartitioner<BuildHasherDefault<DefaultHasher>> = Default::default();
 
         // ~ validate that partitioning by the same key leads to the same
         // partition
