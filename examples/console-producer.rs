@@ -9,8 +9,7 @@ use std::io::{self, stdin, stderr, Write, BufRead, BufReader};
 use std::ops::{Deref, DerefMut};
 use std::time::Duration;
 
-use kafka::client::{KafkaClient, Compression, RequiredAcks,
-                    DEFAULT_CONNECTION_IDLE_TIMEOUT_MILLIS};
+use kafka::client::{KafkaClient, Compression, RequiredAcks, DEFAULT_CONNECTION_IDLE_TIMEOUT_MILLIS};
 use kafka::producer::{AsBytes, Producer, Record, DEFAULT_ACK_TIMEOUT_MILLIS};
 
 /// This is a very simple command line application sending every
@@ -58,11 +57,11 @@ fn produce(cfg: &Config) -> Result<(), Error> {
 
 fn produce_impl(src: &mut BufRead, client: KafkaClient, cfg: &Config) -> Result<(), Error> {
     let mut producer = try!(Producer::from_client(client)
-                            .with_ack_timeout(cfg.ack_timeout)
-                            .with_required_acks(cfg.required_acks)
-                            .with_compression(cfg.compression)
-                            .with_connection_idle_timeout(cfg.conn_idle_timeout)
-                            .create());
+        .with_ack_timeout(cfg.ack_timeout)
+        .with_required_acks(cfg.required_acks)
+        .with_compression(cfg.compression)
+        .with_connection_idle_timeout(cfg.conn_idle_timeout)
+        .create());
     if cfg.batch_size < 2 {
         produce_impl_nobatch(&mut producer, src, cfg)
     } else {
@@ -91,7 +90,10 @@ impl DerefMut for Trimmed {
     }
 }
 
-fn produce_impl_nobatch(producer: &mut Producer, src: &mut BufRead, cfg: &Config) -> Result<(), Error> {
+fn produce_impl_nobatch(producer: &mut Producer,
+                        src: &mut BufRead,
+                        cfg: &Config)
+                        -> Result<(), Error> {
     let mut stderr = stderr();
     let mut rec = Record::from_value(&cfg.topic, Trimmed(String::new()));
     loop {
@@ -112,16 +114,16 @@ fn produce_impl_nobatch(producer: &mut Producer, src: &mut BufRead, cfg: &Config
 // This implementation wants to be efficient.  It buffers N lines from
 // the source and sends these in batches to Kafka.  Line buffers
 // across batches are re-used for the sake of avoiding allocations.
-fn produce_impl_inbatches(producer: &mut Producer, src: &mut BufRead, cfg: &Config)
-                          -> Result<(), Error>
-{
+fn produce_impl_inbatches(producer: &mut Producer,
+                          src: &mut BufRead,
+                          cfg: &Config)
+                          -> Result<(), Error> {
     assert!(cfg.batch_size > 1);
 
     // ~ a buffer of prepared records to be send in a batch to Kafka
     // ~ in the loop following, we'll only modify the 'value' of the
     // cached records
-    let mut rec_stash: Vec<Record<(), Trimmed>> =
-        (0 .. cfg.batch_size)
+    let mut rec_stash: Vec<Record<(), Trimmed>> = (0..cfg.batch_size)
         .map(|_| Record::from_value(&cfg.topic, Trimmed(String::new())))
         .collect();
     // ~ points to the next free slot in `rec_stash`.  if it reaches
@@ -184,11 +186,15 @@ impl fmt::Display for Error {
 }
 
 impl From<kafka::error::Error> for Error {
-    fn from(e: kafka::error::Error) -> Self { Error::Kafka(e) }
+    fn from(e: kafka::error::Error) -> Self {
+        Error::Kafka(e)
+    }
 }
 
 impl From<io::Error> for Error {
-    fn from(e: io::Error) -> Self { Error::Io(e) }
+    fn from(e: io::Error) -> Self {
+        Error::Io(e)
+    }
 }
 
 // --------------------------------------------------------------------
@@ -215,8 +221,10 @@ impl Config {
         opts.optopt("", "topic", "Specify target topic", "NAME");
         opts.optopt("", "input", "Specify input file", "FILE");
         opts.optopt("", "compression", "Compress messages [NONE, GZIP, SNAPPY]", "TYPE");
-        opts.optopt("", "required-acks", "Specify amount of required broker acknowledgments \
-                                          [NONE, ONE, ALL]", "TYPE");
+        opts.optopt("",
+                    "required-acks",
+                    "Specify amount of required broker acknowledgments [NONE, ONE, ALL]",
+                    "TYPE");
         opts.optopt("", "ack-timeout", "Specify time to wait for acks", "MILLIS");
         opts.optopt("", "batch-size", "Send N message in one batch.", "N");
         opts.optopt("", "idle-timeout", "Specify timeout for idle connections", "MILLIS");
@@ -245,18 +253,23 @@ impl Config {
                 Some(ref s) if s.eq_ignore_ascii_case("gzip") => Compression::GZIP,
                 #[cfg(feature = "snappy")]
                 Some(ref s) if s.eq_ignore_ascii_case("snappy") => Compression::SNAPPY,
-                Some(s) => return Err(Error::Literal(format!("Unsupported compression type: {}", s))),
+                Some(s) => {
+                    return Err(Error::Literal(format!("Unsupported compression type: {}", s)))
+                }
             },
             required_acks: match m.opt_str("required-acks") {
                 None => RequiredAcks::One,
                 Some(ref s) if s.eq_ignore_ascii_case("none") => RequiredAcks::None,
                 Some(ref s) if s.eq_ignore_ascii_case("one") => RequiredAcks::One,
                 Some(ref s) if s.eq_ignore_ascii_case("all") => RequiredAcks::All,
-                Some(s) => return Err(Error::Literal(format!("Unknown --required-acks argument: {}", s))),
+                Some(s) => {
+                    return Err(Error::Literal(format!("Unknown --required-acks argument: {}", s)))
+                }
             },
             batch_size: try!(to_number(m.opt_str("batch-size"), 1)),
-            conn_idle_timeout: Duration::from_millis(try!(to_number(m.opt_str("idle-timeout"),
-                                                                    DEFAULT_CONNECTION_IDLE_TIMEOUT_MILLIS))),
+            conn_idle_timeout:
+                Duration::from_millis(try!(to_number(m.opt_str("idle-timeout"),
+                                                     DEFAULT_CONNECTION_IDLE_TIMEOUT_MILLIS))),
             ack_timeout: Duration::from_millis(try!(to_number(m.opt_str("ack-timeout"),
                                                               DEFAULT_ACK_TIMEOUT_MILLIS))),
         })
@@ -266,9 +279,11 @@ impl Config {
 fn to_number<N: FromStr>(s: Option<String>, _default: N) -> Result<N, Error> {
     match s {
         None => Ok(_default),
-        Some(s) => match s.parse::<N>() {
-            Ok(n) => Ok(n),
-            Err(_) => return Err(Error::Literal(format!("Not a number: {}", s))),
+        Some(s) => {
+            match s.parse::<N>() {
+                Ok(n) => Ok(n),
+                Err(_) => return Err(Error::Literal(format!("Not a number: {}", s))),
+            }
         }
     }
 }
