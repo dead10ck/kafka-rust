@@ -17,6 +17,9 @@ before_install:
 before_script:
   - docker-compose up -d
 
+  # wait until kafka is ready with the topic set up
+  - ./do_until_success "docker-compose logs kafka | grep 'Created topic \"kafka-rust-test\"'"
+
 script:
   - |
       travis-cargo build &&
