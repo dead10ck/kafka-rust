@@ -1,10 +1,5 @@
-extern crate kafka;
-
+use super::*;
 use kafka::client::KafkaClient;
-
-const LOCAL_KAFKA_BOOTSTRAP_HOST: &'static str = "localhost:9092";
-const TEST_TOPIC_NAME: &'static str = "kafka-rust-test";
-const TEST_TOPIC_PARTITIONS: [i32; 2] = [0, 1];
 
 #[test]
 fn test_kafka_client_load_metadata() {
