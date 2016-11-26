@@ -87,11 +87,15 @@ impl fmt::Display for Error {
 }
 
 impl From<kafka::error::Error> for Error {
-    fn from(e: kafka::error::Error) -> Self { Error::Kafka(e) }
+    fn from(e: kafka::error::Error) -> Self {
+        Error::Kafka(e)
+    }
 }
 
 impl From<io::Error> for Error {
-    fn from(e: io::Error) -> Self { Error::Io(e) }
+    fn from(e: io::Error) -> Self {
+        Error::Io(e)
+    }
 }
 
 // --------------------------------------------------------------------
@@ -115,8 +119,9 @@ impl Config {
         opts.optopt("", "group", "Specify the consumer group", "NAME");
         opts.optflag("", "no-commit", "Do not commit group offsets");
         opts.optopt("", "storage", "Specify the offset store [zookeeper, kafka]", "STORE");
-        opts.optflag("", "earliest", "Fall back to the earliest offset \
-                                      (when no group offset available)");
+        opts.optflag("",
+                     "earliest",
+                     "Fall back to the earliest offset (when no group offset available)");
 
         let m = match opts.parse(&args[1..]) {
             Ok(m) => m,
@@ -166,5 +171,5 @@ impl Config {
                 FetchOffset::Latest
             },
         })
-   }
+    }
 }

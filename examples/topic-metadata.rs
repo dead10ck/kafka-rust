@@ -36,7 +36,10 @@ struct Offsets {
 
 impl Default for Offsets {
     fn default() -> Self {
-        Offsets { earliest: -1, latest: -1 }
+        Offsets {
+            earliest: -1,
+            latest: -1,
+        }
     }
 }
 
@@ -61,44 +64,47 @@ fn dump_metadata(cfg: Config) -> Result<(), String> {
         let mut topic_width = 0;
         let mut m = HashMap::with_capacity(topics.len());
         let mut offsets = try!(client.fetch_offsets(&topics, FetchOffset::Latest)
-                               .map_err(|e| e.to_string()));
+            .map_err(|e| e.to_string()));
         for (topic, offsets) in offsets {
             topic_width = cmp::max(topic_width, topic.len());
             let mut offs = Vec::with_capacity(offsets.len());
+
             for _ in 0..offsets.len() {
                 offs.push(Offsets::default());
             }
+
             for offset in offsets {
-                match offset.offset {
-                    Ok(o) => offs[offset.partition as usize].latest = o,
-                    Err(e) => debug!("Cannot determine latest offset for {}:{}: {}",
-                                     topic, offset.partition, e),
-                }
+                offs[offset.partition as usize].latest = offset.offset;
             }
+
             m.insert(topic, offs);
         }
+
         offsets = try!(client.fetch_offsets(&topics, FetchOffset::Earliest)
-                       .map_err(|e| e.to_string()));
+            .map_err(|e| e.to_string()));
+
         for (topic, offsets) in offsets {
             let mut offs = m.get_mut(&topic).expect("unknown topic");
             for offset in offsets {
-                match offset.offset {
-                    Ok(o) => offs[offset.partition as usize].earliest = o,
-                    Err(e) => debug!("Cannot determine earliest offset for {}:{}: {}",
-                                     topic, offset.partition, e),
-                }
+                offs[offset.partition as usize].earliest = offset.offset;
             }
         }
+
         (topic_width + 2, m)
     };
     // ~ produce the output
     let mut out = io::stdout();
     let mut out_buf = String::with_capacity(128);
-    let mut fmt_buf = if cfg.size { String::with_capacity(30) } else { String::new() };
+    let mut fmt_buf = if cfg.size {
+        String::with_capacity(30)
+    } else {
+        String::new()
+    };
     // ~ compute the width of the leader-hosts column
     let md = client.topics();
     let host_width = if cfg.host {
-        2 + topics.iter()
+        2 +
+        topics.iter()
             .flat_map(|t| md.partitions(t).expect("unkonwn topic metadata"))
             .map(|p| p.leader().map(|b| b.host().len()).unwrap_or(0))
             .fold(0, cmp::max)
@@ -108,8 +114,7 @@ fn dump_metadata(cfg: Config) -> Result<(), String> {
     // ~ print header line
     if cfg.header {
         use std::fmt::Write;
-        let _ = write!(out_buf, "{1:0$} {2:4} {3:4}",
-                       topic_width, "topic", "p-id", "l-id");
+        let _ = write!(out_buf, "{1:0$} {2:4} {3:4}", topic_width, "topic", "p-id", "l-id");
         if cfg.host {
             let _ = write!(out_buf, " {1:>0$}", host_width, "(l-host)");
         }
@@ -133,14 +138,12 @@ fn dump_metadata(cfg: Config) -> Result<(), String> {
             if cfg.topic_separators && ti != 0 && pi == 0 {
                 out_buf.push('\n');
             }
-            let (leader_id, leader_host) =
-                tmd.partition(pi as i32)
+            let (leader_id, leader_host) = tmd.partition(pi as i32)
                 .expect("unknown topic partition metadata")
                 .leader()
                 .map(|b| (b.id(), b.host()))
                 .unwrap_or((-1, ""));
-            let _ = write!(out_buf, "{1:0$} {2:>4} {3:>4}",
-                           topic_width, topic, pi, leader_id);
+            let _ = write!(out_buf, "{1:0$} {2:>4} {3:>4}", topic_width, topic, pi, leader_id);
             if cfg.host {
                 fmt_buf.clear();
                 let _ = write!(fmt_buf, "({})", leader_host);
@@ -195,7 +198,9 @@ impl Config {
         Ok(Config {
             brokers: m.opt_str("brokers")
                 .unwrap_or_else(|| "localhost:9092".to_owned())
-                .split(',').map(|s| s.trim().to_owned()).collect(),
+                .split(',')
+                .map(|s| s.trim().to_owned())
+                .collect(),
             topics: match m.opt_str("topics") {
                 None => Vec::new(),
                 Some(s) => s.split(',').map(|s| s.trim().to_owned()).collect(),

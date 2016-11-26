@@ -60,17 +60,12 @@
 // XXX 2) Handle recoverable errors behind the scenes through retry attempts
 
 use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
 use std::fmt;
-use std::hash::{Hasher, SipHasher, BuildHasher, BuildHasherDefault};
+use std::hash::{Hasher, BuildHasher, BuildHasherDefault};
 use std::time::Duration;
-
 use client::{self, KafkaClient};
-// public re-exports
-pub use client::Compression;
-pub use client::RequiredAcks;
-use error::Result;
-use utils::TopicPartitionOffset;
-
+use error::{Error, Result};
 use ref_slice::ref_slice;
 
 #[cfg(feature = "security")]
@@ -78,9 +73,11 @@ use client::SecurityConfig;
 
 #[cfg(not(feature = "security"))]
 type SecurityConfig = ();
-
 use client_internals::KafkaClientInternals;
 use protocol;
+
+// public re-exports
+pub use client::{Compression, RequiredAcks, ProduceConfirm, ProducePartitionConfirm};
 
 /// The default value for `Builder::with_ack_timeout`.
 pub const DEFAULT_ACK_TIMEOUT_MILLIS: u64 = 30 * 1000;
@@ -240,8 +237,13 @@ impl Producer {
         Builder::new(None, hosts)
     }
 
+    /// Borrows the underlying kafka client.
+    pub fn client(&self) -> &KafkaClient {
+        &self.client
+    }
+
     /// Destroys this producer returning the underlying kafka client.
-    pub fn client(self) -> KafkaClient {
+    pub fn into_client(self) -> KafkaClient {
         self.client
     }
 }
@@ -254,20 +256,29 @@ impl<P: Partitioner> Producer<P> {
               V: AsBytes
     {
         let mut rs = try!(self.send_all(ref_slice(rec)));
+
         if self.config.required_acks == 0 {
             // ~ with no required_acks we get no response and
             // consider the send-data request blindly as successful
             Ok(())
         } else {
             assert_eq!(1, rs.len());
-            rs.pop().unwrap().offset.map(|_| ())
+            let mut produce_confirm = rs.pop().unwrap();
+
+            assert_eq!(1, produce_confirm.partition_confirms.len());
+            produce_confirm.partition_confirms
+                .pop()
+                .unwrap()
+                .offset
+                .map(|_| ())
+                .map_err(Error::Kafka)
         }
     }
 
-    /// Synchronously send all of the specified messages to Kafka.
-    pub fn send_all<'a, K, V>(&mut self,
-                              recs: &[Record<'a, K, V>])
-                              -> Result<Vec<TopicPartitionOffset>>
+    /// Synchronously send all of the specified messages to Kafka. To validate
+    /// that all of the specified records have been successfully delivered,
+    /// inspection of the offsets on the returned confirms is necessary.
+    pub fn send_all<'a, K, V>(&mut self, recs: &[Record<'a, K, V>]) -> Result<Vec<ProduceConfirm>>
         where K: AsBytes,
               V: AsBytes
     {
@@ -554,7 +565,7 @@ pub trait Partitioner {
 ///
 /// See `Builder::with_partitioner`.
 #[derive(Default)]
-pub struct DefaultPartitioner<H = BuildHasherDefault<SipHasher>> {
+pub struct DefaultPartitioner<H = BuildHasherDefault<DefaultHasher>> {
     // ~ a hasher builder; used to consistently hash keys
     hash_builder: H,
     // ~ a counter incremented with each partitioned message to
@@ -635,8 +646,9 @@ impl<H: BuildHasher> Partitioner for DefaultPartitioner<H> {
 
 #[cfg(test)]
 mod default_partitioner_tests {
-    use std::hash::{Hasher, SipHasher, BuildHasherDefault};
+    use std::hash::{Hasher, BuildHasherDefault};
     use std::collections::HashMap;
+    use std::collections::hash_map::DefaultHasher;
 
     use client;
     use super::{DefaultPartitioner, Partitioner, Partitions, Topics};
@@ -671,16 +683,16 @@ mod default_partitioner_tests {
     fn test_key_partitioning() {
         let h = topics_map(vec![("foo",
                                  Partitions {
-                                    available_ids: vec![0, 1, 4],
-                                    num_all_partitions: 5,
-                                }),
+                                     available_ids: vec![0, 1, 4],
+                                     num_all_partitions: 5,
+                                 }),
                                 ("bar",
                                  Partitions {
-                                    available_ids: vec![0, 1],
-                                    num_all_partitions: 2,
-                                })]);
+                                     available_ids: vec![0, 1],
+                                     num_all_partitions: 2,
+                                 })]);
 
-        let mut p: DefaultPartitioner<BuildHasherDefault<SipHasher>> = Default::default();
+        let mut p: DefaultPartitioner<BuildHasherDefault<DefaultHasher>> = Default::default();
 
         // ~ validate that partitioning by the same key leads to the same
         // partition
@@ -717,14 +729,14 @@ mod default_partitioner_tests {
 
         let h = topics_map(vec![("confirms",
                                  Partitions {
-                                    available_ids: vec![0, 1],
-                                    num_all_partitions: 2,
-                                }),
+                                     available_ids: vec![0, 1],
+                                     num_all_partitions: 2,
+                                 }),
                                 ("contents",
                                  Partitions {
-                                    available_ids: vec![0, 1, 9],
-                                    num_all_partitions: 10,
-                                })]);
+                                     available_ids: vec![0, 1, 9],
+                                     num_all_partitions: 10,
+                                 })]);
 
         // verify also the partitioner derives the correct partition
         // ... this is hash modulo num_all_partitions. here it is a
